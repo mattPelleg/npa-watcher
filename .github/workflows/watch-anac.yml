@@ -1,0 +1,45 @@
+name: Watch ANAC NPA commits
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: anac-npa-watch
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check latest commit
+        id: check
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/anticorruzione/npa/commits/main | jq -r .sha)
+          MSG=$(curl -s https://api.github.com/repos/anticorruzione/npa/commits/main | jq -r .commit.message)
+          PREV=$(cat last_sha.txt 2>/dev/null || echo "none")
+          echo "latest=$LATEST" >> $GITHUB_OUTPUT
+          echo "msg=$MSG" >> $GITHUB_OUTPUT
+          if [ "$LATEST" != "$PREV" ]; then
+            echo "$LATEST" > last_sha.txt
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+      - name: Notify Discord
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          PAYLOAD=$(jq -n --arg sha "${{ steps.check.outputs.latest }}" \
+                          --arg msg "${{ steps.check.outputs.msg }}" \
+                          '{content: "🔔 Nuovo commit su ANAC NPA: \($sha) - \($msg)"}')
+          curl -H "Content-Type: application/json" -d "$PAYLOAD" "${{ secrets.DISCORD_WEBHOOK_URL }}"
+      - name: Commit updated sha
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git config user.name "bot"
+          git config user.email "bot@example.com"
+          git add last_sha.txt
+          git commit -m "update sha"
+          git push
