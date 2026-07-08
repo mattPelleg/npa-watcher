@@ -19,9 +19,17 @@ jobs:
         run: |
           LATEST=$(curl -s https://api.github.com/repos/anticorruzione/npa/commits/main | jq -r .sha)
           MSG=$(curl -s https://api.github.com/repos/anticorruzione/npa/commits/main | jq -r .commit.message)
+          
+          # Validazione: lo sha deve essere una stringa esadecimale di 40 caratteri
+          if [[ ! "$LATEST" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "SHA non valido: '$LATEST' - probabilmente errore API. Uscita."
+            exit 0
+          fi
+          
           PREV=$(cat last_sha.txt 2>/dev/null || echo "none")
           echo "latest=$LATEST" >> $GITHUB_OUTPUT
           echo "msg=$MSG" >> $GITHUB_OUTPUT
+          
           if [ "$LATEST" != "$PREV" ]; then
             echo "$LATEST" > last_sha.txt
             echo "changed=true" >> $GITHUB_OUTPUT
