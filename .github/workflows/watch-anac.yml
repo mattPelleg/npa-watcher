@@ -17,8 +17,20 @@ jobs:
       - name: Check latest commit
         id: check
         run: |
-          LATEST=$(curl -s https://api.github.com/repos/anticorruzione/npa/commits/main | jq -r .sha)
-          MSG=$(curl -s https://api.github.com/repos/anticorruzione/npa/commits/main | jq -r .commit.message)
+          # Una sola chiamata API, risposta salvata in variabile
+          RESPONSE=$(curl -s \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/anticorruzione/npa/commits/main)
+
+          # Verifica che la risposta sia JSON valido
+          if ! echo "$RESPONSE" | jq empty 2>/dev/null; then
+            echo "Risposta API non valida: $RESPONSE"
+            exit 0
+          fi
+
+          LATEST=$(echo "$RESPONSE" | jq -r .sha)
+          MSG=$(echo "$RESPONSE" | jq -r .commit.message)
 
           # Validazione: lo sha deve essere una stringa esadecimale di 40 caratteri
           if [[ ! "$LATEST" =~ ^[0-9a-f]{40}$ ]]; then
