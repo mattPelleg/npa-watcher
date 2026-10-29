@@ -1,0 +1,141 @@
+name: Watch ANAC NPA Issues
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: anac-npa-issues-watch
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check watched issues
+        id: check
+        run: |
+          ISSUES_FILE="watched-issues.txt"
+          STATE_FILE="issues-state.json"
+          NOTIFICATIONS=""
+
+          # Legge lo stato attuale dal file JSON
+          CURRENT_STATE=$(cat "$STATE_FILE" 2>/dev/null || echo "{}")
+
+          NEW_STATE="{}"
+
+          while IFS= read -r ISSUE_NUM || [[ -n "$ISSUE_NUM" ]]; do
+            # Salta righe vuote o commenti
+            [[ -z "$ISSUE_NUM" || "$ISSUE_NUM" == \#* ]] && continue
+
+            ISSUE_NUM=$(echo "$ISSUE_NUM" | tr -d '[:space:]')
+
+            # Chiamata API GitHub
+            RESPONSE=$(curl -s \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/anticorruzione/npa/issues/$ISSUE_NUM")
+
+            # Verifica JSON valido
+            if ! echo "$RESPONSE" | jq empty 2>/dev/null; then
+              echo "Risposta non valida per issue #$ISSUE_NUM, skip."
+              continue
+            fi
+
+            # Estrae i campi rilevanti
+            STATE=$(echo "$RESPONSE" | jq -r .state)
+            COMMENTS=$(echo "$RESPONSE" | jq -r .comments)
+            UPDATED_AT=$(echo "$RESPONSE" | jq -r .updated_at)
+            TITLE=$(echo "$RESPONSE" | jq -r .title)
+
+            # Legge lo stato precedente per questa issue
+            PREV_STATE=$(echo "$CURRENT_STATE" | jq -r ".\"$ISSUE_NUM\".state // \"none\"")
+            PREV_COMMENTS=$(echo "$CURRENT_STATE" | jq -r ".\"$ISSUE_NUM\".comments // -1")
+            PREV_UPDATED=$(echo "$CURRENT_STATE" | jq -r ".\"$ISSUE_NUM\".updated_at // \"none\"")
+
+            # Controlla se c'è stato un cambiamento
+            CHANGED=false
+            CHANGE_MSG=""
+
+            if [ "$PREV_STATE" == "none" ]; then
+              CHANGED=true
+              CHANGE_MSG="Issue iniziata a monitorare"
+            elif [ "$STATE" != "$PREV_STATE" ]; then
+              CHANGED=true
+              if [ "$STATE" == "closed" ]; then
+                CHANGE_MSG="Issue CHIUSA"
+              else
+                CHANGE_MSG="Issue RIAPERTA"
+              fi
+            elif [ "$COMMENTS" != "$PREV_COMMENTS" ]; then
+              CHANGED=true
+              DIFF=$((COMMENTS - PREV_COMMENTS))
+              CHANGE_MSG="$DIFF nuovo/i commento/i (totale: $COMMENTS)"
+            fi
+
+            if [ "$CHANGED" == "true" ]; then
+              NOTIFICATIONS="${NOTIFICATIONS}|#${ISSUE_NUM}::${TITLE}::${CHANGE_MSG}::${STATE}"
+            fi
+
+            # Aggiorna lo stato nel JSON
+            NEW_STATE=$(echo "$NEW_STATE" | jq \
+              --arg num "$ISSUE_NUM" \
+              --arg state "$STATE" \
+              --argjson comments "$COMMENTS" \
+              --arg updated_at "$UPDATED_AT" \
+              --arg title "$TITLE" \
+              '.[$num] = {state: $state, comments: $comments, updated_at: $updated_at, title: $title}')
+
+          done < "$ISSUES_FILE"
+
+          # Salva il nuovo stato
+          echo "$NEW_STATE" > "$STATE_FILE"
+
+          # Esporta le notifiche
+          EOF_DELIMITER=$(openssl rand -hex 8)
+          echo "notifications<<$EOF_DELIMITER" >> $GITHUB_OUTPUT
+          echo "$NOTIFICATIONS" >> $GITHUB_OUTPUT
+          echo "$EOF_DELIMITER" >> $GITHUB_OUTPUT
+
+      - name: Notify Discord
+        if: steps.check.outputs.notifications != ''
+        run: |
+          NOTIFICATIONS="${{ steps.check.outputs.notifications }}"
+
+          IFS='|' read -ra ITEMS <<< "$NOTIFICATIONS"
+          for ITEM in "${ITEMS[@]}"; do
+            [[ -z "$ITEM" ]] && continue
+
+            IFS='::' read -r ISSUE_REF TITLE CHANGE STATE <<< "$ITEM"
+
+            EMOJI="🔔"
+            if [[ "$STATE" == "closed" ]]; then
+              EMOJI="🔴"
+            elif [[ "$CHANGE" == *"commento"* ]]; then
+              EMOJI="💬"
+            elif [[ "$CHANGE" == *"RIAPERTA"* ]]; then
+              EMOJI="🟢"
+            fi
+
+            PAYLOAD=$(jq -n \
+              --arg emoji "$EMOJI" \
+              --arg issue "$ISSUE_REF" \
+              --arg title "$TITLE" \
+              --arg change "$CHANGE" \
+              --arg url "https://github.com/anticorruzione/npa/issues/${ISSUE_REF//[^0-9]/}" \
+              '{content: "\($emoji) Issue \($issue) — \($title)\n**\($change)**\n\($url)"}')
+
+            curl -s -H "Content-Type: application/json" -d "$PAYLOAD" "${{ secrets.DISCORD_WEBHOOK_URL }}"
+            sleep 1
+          done
+
+      - name: Commit updated state
+        run: |
+          git config user.name "bot"
+          git config user.email "bot@example.com"
+          git add issues-state.json
+          git diff --staged --quiet || git commit -m "update issues state"
+          git push
