@@ -128,7 +128,7 @@ jobs:
               --arg url "https://github.com/anticorruzione/npa/issues/${ISSUE_REF//[^0-9]/}" \
               '{content: "\($emoji) Issue \($issue) — \($title)\n**\($change)**\n\($url)"}')
 
-            curl -s -H "Content-Type: application/json" -d "$PAYLOAD" "${{ secrets.DISCORD_WEBHOOK_URL }}"
+            curl -s -H "Content-Type: application/json" -d "$PAYLOAD" "${{ secrets.DISCORD_ISSUES_WEBHOOK_URL }}"
             sleep 1
           done
 
