@@ -1,1 +1,13 @@
-{}
+{
+  "_description": {
+    "scopo": "File di stato interno generato e aggiornato automaticamente dal workflow watch-issues.yml",
+    "utilizzo": "Tiene traccia dell'ultimo stato noto di ogni issue monitorata in watched-issues.txt. Ad ogni esecuzione del workflow, lo stato attuale viene confrontato con quello salvato qui per rilevare eventuali cambiamenti (nuovi commenti, chiusura, riapertura). In caso di differenze viene inviata una notifica su Discord.",
+    "campi_per_issue": {
+      "state": "Stato attuale della issue — 'open' o 'closed'",
+      "comments": "Numero totale di commenti al momento dell'ultimo controllo",
+      "updated_at": "Timestamp ISO 8601 dell'ultimo aggiornamento rilevato",
+      "title": "Titolo della issue al momento dell'ultimo controllo"
+    },
+    "nota": "Non modificare manualmente questo file. Viene gestito esclusivamente dal workflow GitHub Actions."
+  }
+}
