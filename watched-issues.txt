@@ -1,0 +1,22 @@
+# watched-issues.txt
+#
+# Questo file contiene la lista delle issue del repository GitHub
+# anticorruzione/npa che devono essere monitorate attivamente.
+#
+# Il workflow watch-issues.yml legge questo file ad ogni esecuzione
+# e controlla tramite API GitHub se ci sono aggiornamenti per ciascuna
+# issue elencata (nuovi commenti, chiusura, riapertura).
+# In caso di modifiche, viene inviata una notifica automatica su Discord.
+#
+# Come usarlo:
+#   - Per iniziare a monitorare una issue: aggiungi il suo numero su una nuova riga e fai commit
+#   - Per smettere di monitorarla: rimuovi la riga corrispondente e fai commit
+#   - Le righe che iniziano con # sono commenti e vengono ignorate
+#
+# Esempio:
+#   3131
+#   3200
+#
+# Link al repository ANAC: https://github.com/anticorruzione/npa/issues
+
+3131
